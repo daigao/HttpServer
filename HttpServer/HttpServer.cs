@@ -23,53 +23,25 @@ namespace HttpServer
             {
                 _endPoint = endPoint;
             }
+            _soclet.ReceiveTimeout = 60 * 1000;
             _soclet.Bind(_endPoint);
             _soclet.Listen(_listen);
         }
         public void BeginAccept()
         {
+            Console.WriteLine("开始监听");
             _soclet.BeginAccept(AcceptCallback, _soclet);
         }
         private void AcceptCallback(IAsyncResult asyncResult)
         {
             Socket server = asyncResult.AsyncState as Socket;
             var serverManager = server.EndAccept(asyncResult);
-            _buffer = new byte[serverManager.ReceiveBufferSize];
-            serverManager.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, ReceiveCallback, serverManager);
+            var socketHandle = new SocketHandle(serverManager);
+            socketHandle.RequestMessageCallback += RequestMessageCallback;
+            socketHandle.Start();
             server.BeginAccept(AcceptCallback, server);
         }
-        private void ReceiveCallback(IAsyncResult asyncResult)
-        {
-            try
-            {
-                Socket serverManager = asyncResult.AsyncState as Socket;
-                int len = serverManager.EndReceive(asyncResult);
-                if (serverManager.Connected == false) return;
-                var text = Encoding.UTF8.GetString(_buffer, 0, len);
-                if (string.IsNullOrWhiteSpace(text)) return;
-                var requestContext = new RequestContext(text);
-                var responseMessage = RequestMessageCallback?.Invoke(requestContext);
-                if (serverManager.Connected == false) return;
-                serverManager.BeginSend(responseMessage.GetBytes, 0, responseMessage.GetBytes.Length, SocketFlags.None, SendCallback, serverManager);
-            }
-            catch (Exception)
-            {
-                Console.WriteLine("you");
-            }
-        }
-        private void SendCallback(IAsyncResult asyncResult)
-        {
-            try
-            {
-                Socket serverManager = asyncResult.AsyncState as Socket;
-                int len = serverManager.EndSend(asyncResult);
-                serverManager.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, ReceiveCallback, serverManager);
-            }
-            catch (Exception)
-            {
-                Console.WriteLine("you111");
-            }
-        }
+
         public void Dispose()
         {
             _soclet.Close();
